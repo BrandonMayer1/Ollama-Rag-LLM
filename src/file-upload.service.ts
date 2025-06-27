@@ -4,60 +4,53 @@ import * as pdfParse from 'pdf-parse';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import { OllamaEmbeddings } from "@langchain/ollama";
+import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
+
+
 
 @Injectable()
 export class FileUploadService {
   private qdrant: QdrantClient;
+  private embeddings: OllamaEmbeddings; 
+  private textSplitter: RecursiveCharacterTextSplitter;
+
 
   constructor(private readonly httpService: HttpService) {
     this.qdrant = new QdrantClient({ url: 'http://localhost:6333' });
+    this.embeddings = new OllamaEmbeddings({
+      model: "mxbai-embed-large", 
+      baseUrl: "http://localhost:11434", 
+    });
+    this.textSplitter = new RecursiveCharacterTextSplitter({
+      chunkSize: 100,         
+      chunkOverlap: 20,        
+      separators: ['\n\n', '\n', ' ', ''],  
+    });
   }
 
   async handleFileUpload(file: Express.Multer.File): Promise<string> {
     console.log("RECIEVED FILE");
     const buffer = await fs.readFile(file.path);
     const data = await pdfParse(buffer);
-    const chunks = this.simpleChunk(data.text.trim(), 100); 
-
-    for (const chunk of chunks) {
-      const embedding = await this.toVector(chunk);
-      await this.storeInQdrant(embedding, chunk);
+    const chunks = await this.textSplitter.splitText(data.text);
+    console.log(`\n=== ===\n`);
+    for (let i = 0; i < chunks.length; i++) {
+      console.log(`\n--- ---`);
+      console.log(chunks[i]);
+      console.log(`--- END CHUNK ${i + 1} ---\n`);
     }
-  
+    for (const chunk of chunks){
+      let vector = await this.toVector(chunk);
+      await this.storeInQdrant(vector, chunk);
+    }
+    
     return `Stored ${chunks.length} chunks in vector DB.`;
   }
 
-    private simpleChunk(text: string, chunkSize: number): string[] {
-    const chunks: string[] = [];
-    for (let i = 0; i < text.length; i += chunkSize) {
-        chunks.push(text.slice(i, i + chunkSize));
-    }
-    return chunks;
-    }
-  
-
   async toVector(message: string): Promise<number[]> {
-    const payload = {
-      model: "mxbai-embed-large",
-      input: message,
-    };
-
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post('http://localhost:11434/api/embed', payload, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-      );
-
-      return response.data.embeddings?.[0]; //Check
-    }
-    catch (error){
-      console.log("ERROR: " + error.message);
-      throw error;
-    }
-  }
+    return this.embeddings.embedQuery(message);
+}
 
   async storeInQdrant(embedding: number[], text: string) {
     const collections = await this.qdrant.getCollections();
@@ -95,3 +88,27 @@ export class FileUploadService {
     return result.map(hit => hit.payload?.text).filter(Boolean).join('\n\n');
   }
 }
+
+
+
+
+
+
+    /** 
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post('http://localhost:11434/api/embed', payload, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      );
+
+      return response.data.embeddings?.[0]; //Check
+    }
+    catch (error){
+      console.log("ERROR: " + error.message);
+      throw error;
+    }
+  } */
