@@ -75,7 +75,7 @@ export class AppController {
           </form>
           <br />
           <form action="/upload" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" accept=".pdf" required />
+            <input type="file" name="file" accept=".md" required />
             <button type="submit">Upload File</button>
           </form>
   
@@ -123,12 +123,7 @@ export class AppController {
 
   
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', {
-    dest: './uploads/',
-    limits: {
-      fileSize: 1024 * 1024 * 5 // 5MB limit
-    }
-  }))
+  @UseInterceptors(FileInterceptor('file'))
   async uploadFile(@UploadedFile() file: Express.Multer.File, @Req() req: Request, @Res() res: Response) {
     if (!file) {
       return res.status(400).send('No file uploaded');
