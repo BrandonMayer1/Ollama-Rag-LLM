@@ -1,0 +1,20 @@
+# docker-compose.yml
+version: "3.8"
+
+services:
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: chroma-OllamaRagWebChat
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+    volumes:
+      - ./chroma-data:/chroma/.chroma/index
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
